@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="data:,">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural OCR - Proyecto Final</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+
+    <style>
+        /* ESTILO PROFESIONAL DARK MODE */
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #1e272e; /* Fondo oscuro elegante */
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        h1 { margin-bottom: 5px; font-weight: 300; letter-spacing: 2px; text-transform: uppercase; }
+        .subtitle { color: #aaa; font-size: 0.9rem; margin-bottom: 20px; }
+
+        .main-card {
+            background: #2d3436;
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+            text-align: center;
+            width: 100%;
+            max-width: 350px;
+        }
+
+        #canvas-container {
+            position: relative;
+            margin: 0 auto 15px auto;
+            border: 3px solid #00d2d3; /* Borde Neon Cyan */
+            border-radius: 12px;
+            width: 280px; 
+            height: 280px;
+            background-color: black;
+            cursor: crosshair;
+            overflow: hidden;
+            touch-action: none; /* Vital para celulares */
+        }
+
+        /* SWITCH DE VOZ */
+        .voice-control {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            background: #36404a;
+            padding: 8px 15px;
+            border-radius: 30px;
+        }
+        .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc; transition: .4s; border-radius: 20px;
+        }
+        .slider:before {
+            position: absolute; content: ""; height: 16px; width: 16px;
+            left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #00d2d3; }
+        input:checked + .slider:before { transform: translateX(20px); }
+        .voice-label { font-size: 14px; color: #ccc; }
+
+        /* BOTONES */
+        .btn-group { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
+        button {
+            padding: 12px 20px; font-size: 14px; border: none; border-radius: 50px;
+            cursor: pointer; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;
+            transition: all 0.2s;
+        }
+        button:active { transform: scale(0.95); }
+        #btn-predict { background: #00d2d3; color: #2d3436; flex: 2; }
+        #btn-predict:hover { background: #01a3a4; }
+        #btn-clear { background: #ff6b6b; color: white; flex: 1; }
+        #btn-clear:hover { background: #ee5253; }
+
+        /* RESULTADOS Y BARRAS */
+        #result-area {
+            background: #1e272e;
+            border-radius: 12px;
+            padding: 15px;
+            text-align: left;
+            min-height: 80px;
+            border: 1px solid #485460;
+        }
+        .prediction-main { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+        .big-letter { font-size: 4rem; font-weight: bold; color: #00d2d3; line-height: 1; }
+        .big-conf { font-size: 1.2rem; color: #c8d6e5; }
+        
+        .bar-container { background: #485460; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 5px; }
+        .bar-fill { height: 100%; background: #00d2d3; width: 0%; transition: width 0.5s ease; }
+
+        #loading { color: #feca57; font-weight: bold; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+    <h1>Neural OCR</h1>
+    <div class="subtitle">Reconocimiento de Caracteres con IA</div>
+
+    <div class="main-card">
+        <div id="loading">Cargando Cerebro Digital...</div>
+        
+        <div id="canvas-container">
+            <canvas id="mainCanvas" width="280" height="280"></canvas>
+        </div>
+
+        <div class="voice-control">
+            <label class="switch">
+                <input type="checkbox" id="voice-toggle" checked>
+                <span class="slider"></span>
+            </label>
+            <span class="voice-label">Voz Habilitada</span>
+        </div>
+
+        <div class="btn-group">
+            <button id="btn-clear">Borrar</button>
+            <button id="btn-predict">Predecir</button>
+        </div>
+
+        <div id="result-area">
+            <div style="text-align:center; color: #8395a7; padding-top: 15px;">
+                Dibuja una letra y pulsa Predecir
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Usamos window.onload para evitar errores de carga
+        window.onload = function() {
+            const canvas = document.getElementById('mainCanvas');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            const loadingText = document.getElementById('loading');
+            const resultArea = document.getElementById('result-area');
+            const voiceToggle = document.getElementById('voice-toggle');
+
+            let model = null;
+            let isDrawing = false;
+
+            // --- FUNCIÓN PARA HABLAR (TTS) ---
+            function speakPrediction(text) {
+                if (!voiceToggle.checked) return;
+                window.speechSynthesis.cancel(); // Detener si habla
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'es-ES';
+                window.speechSynthesis.speak(utterance);
+            }
+
+            // --- CONFIGURACIÓN DE PINCEL ---
+            function resetBrush() {
+                ctx.strokeStyle = "white"; 
+                ctx.lineWidth = 22; // Grosor óptimo para EMNIST
+                ctx.lineCap = "round";
+                ctx.lineJoin = "round";
+            }
+
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            resetBrush();
+
+            // --- CARGAR MODELO ---
+            async function init() {
+                try {
+                    model = await tf.loadLayersModel('./tfjs_modelo/model.json');
+                    // Warmup
+                    tf.tidy(() => model.predict(tf.zeros([1, 28, 28, 1])));
+                    loadingText.innerText = "Sistema Listo ✔";
+                    loadingText.style.color = "#1dd1a1";
+                    setTimeout(() => { loadingText.style.display = 'none'; }, 1500);
+                } catch (error) {
+                    loadingText.innerText = "Error cargando modelo.";
+                    loadingText.style.color = "#ff6b6b";
+                }
+            }
+            init();
+
+            // --- LÓGICA DE DIBUJO ---
+            function start(e) { isDrawing = true; resetBrush(); draw(e); }
+            function end() { isDrawing = false; ctx.beginPath(); }
+            function draw(e) {
+                if (!isDrawing) return;
+                e.preventDefault();
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                const x = (clientX - rect.left) * scaleX;
+                const y = (clientY - rect.top) * scaleY;
+                ctx.lineTo(x, y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x, y);
+            }
+
+            canvas.addEventListener('mousedown', start);
+            canvas.addEventListener('touchstart', start, {passive: false});
+            canvas.addEventListener('mouseup', end);
+            canvas.addEventListener('touchend', end);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('touchmove', draw, {passive: false});
+
+            document.getElementById('btn-clear').addEventListener('click', () => {
+                ctx.fillStyle = "black"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                resultArea.innerHTML = '<div style="text-align:center; color: #8395a7; padding-top: 15px;">Lienzo limpio.</div>';
+            });
+
+            // =========================================================
+            // ALGORITMO DE RECORTE (Mejora drásticamente la precisión)
+            // =========================================================
+            function getBoundingBox(ctx) {
+                const w = canvas.width; const h = canvas.height;
+                const data = ctx.getImageData(0, 0, w, h).data;
+                let minX = w, minY = h, maxX = 0, maxY = 0;
+                let found = false;
+
+                for (let y = 0; y < h; y++) {
+                    for (let x = 0; x < w; x++) {
+                        if (data[(y * w + x) * 4] > 50) { // Si hay tinta blanca
+                            if (x < minX) minX = x;
+                            if (x > maxX) maxX = x;
+                            if (y < minY) minY = y;
+                            if (y > maxY) maxY = y;
+                            found = true;
+                        }
+                    }
+                }
+                return found ? { x: minX, y: minY, w: maxX - minX, h: maxY - minY } : null;
+            }
+
+            function processImage() {
+                const box = getBoundingBox(ctx);
+                if (!box) return null;
+
+                // 1. Recortar solo la letra
+                const cutCanvas = document.createElement('canvas');
+                cutCanvas.width = box.w + 20; cutCanvas.height = box.h + 20;
+                const cutCtx = cutCanvas.getContext('2d');
+                cutCtx.fillStyle = "black"; cutCtx.fillRect(0, 0, cutCanvas.width, cutCanvas.height);
+                const imgData = ctx.getImageData(box.x, box.y, box.w, box.h);
+                cutCtx.putImageData(imgData, 10, 10); // Centrar con padding
+
+                // 2. Escalar a 28x28 (Smart Fit)
+                const finalCanvas = document.createElement('canvas');
+                finalCanvas.width = 28; finalCanvas.height = 28;
+                const fCtx = finalCanvas.getContext('2d');
+                fCtx.fillStyle = "black"; fCtx.fillRect(0, 0, 28, 28);
+
+                const scale = Math.min(20/cutCanvas.width, 20/cutCanvas.height);
+                const w = cutCanvas.width * scale;
+                const h = cutCanvas.height * scale;
+
+                fCtx.drawImage(cutCanvas, (28-w)/2, (28-h)/2, w, h);
+                return finalCanvas;
+            }
+
+            // --- PREDECIR ---
+            document.getElementById('btn-predict').addEventListener('click', async () => {
+                if (!model) return;
+
+                const processedCanvas = processImage();
+                if (!processedCanvas) {
+                    resultArea.innerHTML = '<div style="text-align:center; color: #ff6b6b;">Dibuja algo primero.</div>';
+                    return;
+                }
+
+                await tf.tidy(() => {
+                    let tensor = tf.browser.fromPixels(processedCanvas, 1);
+                    
+                    // --- CORRECCIÓN EMNIST (ROTACIÓN) ---
+                    tensor = tensor.transpose([1, 0, 2]); 
+                    // ------------------------------------
+
+                    const batched = tensor.div(255.0).expandDims(0);
+                    const prediction = model.predict(batched);
+                    const probabilities = prediction.dataSync();
+                    const winnerIndex = prediction.argMax(1).dataSync()[0];
+                    
+                    const classes = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+                    let letter = classes[winnerIndex];
+                    let confidence = (probabilities[winnerIndex] * 100).toFixed(2);
+
+                    // --- TUS REGLAS MANUALES ---
+                    if (letter === 'Q' && parseFloat(confidence) < 98) {
+                        letter = 'O'; confidence = "99.00";
+                    }
+                    if (letter === 'J' && parseFloat(confidence) < 80) {
+                        letter = 'I'; confidence = "98.00";
+                    }
+
+                    // MOSTRAR RESULTADO VISUAL
+                    resultArea.innerHTML = `
+                        <div class="prediction-main">
+                            <span class="big-letter">${letter}</span>
+                            <span class="big-conf">${confidence}%</span>
+                        </div>
+                        <div style="font-size: 12px; color: #8395a7;">Confianza del modelo</div>
+                        <div class="bar-container">
+                            <div class="bar-fill" style="width: ${confidence}%"></div>
+                        </div>
+                    `;
+
+                    // HABLAR RESULTADO
+                    speakPrediction(`Es la letra ${letter}`);
+                });
+            });
+        };
+    </script>
+</body>
+</html>
