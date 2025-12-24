@@ -20,11 +20,11 @@ Web: Implementación "Client-side" (sin servidores externos), garantizando priva
 Rendimiento: Supera el rendimiento base (85.15%) y modelos estándar (>90%) reportados en la literatura.
 
 Estructura de Archivos
-/model: Archivos del modelo entrenado y convertido para la web.
+/tfjs_modelo: Incluye los archivos .bin y .json descargados del modelo ya entrenado.
 
-/web: Código fuente de la página web (HTML, CSS, JS).
+/index: Código fuente de la página web (HTML, CSS, JS).
 
-/notebooks: Cuadernos de Jupyter con el proceso de entrenamiento paso a paso.
+/Instrucciones de Ejecución: Archivo .txt con instrucciones de ejecución para servidor local.
 
 Cómo Usar
 Para probar la aplicación web:
