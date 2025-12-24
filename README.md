@@ -1,7 +1,3 @@
-Entendido. Aquí tienes una versión minimalista y basada solo en texto, ideal si quieres algo limpio, directo y sin complicaciones visuales.
-
-Copia y pega esto en tu archivo README.md.
-
 Reconocimiento de Caracteres Manuscritos con CNN y TensorFlow.js
 Autor: Omar Alberto Herrera Garcia Institución: Instituto Tecnológico de Ciudad Juárez
 
