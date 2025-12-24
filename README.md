@@ -31,8 +31,6 @@ Para probar la aplicación web:
 
 1-Descarga o clona este repositorio.
 
-Abre la carpeta web.
-
-Ejecuta el archivo index.html en tu navegador (se recomienda usar un servidor local simple si el navegador bloquea la carga del modelo por seguridad).
+Abre el archivo .txt Instrucciones de Ejecución para correr la aplicación web en un servidor local.
 
 2-Entra a este enlace para acceder a la aplicación web: https://herreraomar12321-arch.github.io/Lector-de-Letras-IA/
